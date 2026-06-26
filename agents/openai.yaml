@@ -1,0 +1,4 @@
+interface:
+  display_name: "Incident Response Host Triage"
+  short_description: "Cross-agent host IR log collection and analysis"
+  default_prompt: "Use $incident-response-host-triage to collect host triage logs, analyze suspicious activity, and write an evidence-backed incident response report."

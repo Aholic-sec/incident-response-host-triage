@@ -1,0 +1,28 @@
+# Never commit collected host evidence.
+IR-Logs-*/
+**/IR-Logs-*/
+
+# Local OS/editor noise.
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
+
+# Archives often contain collected evidence.
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# Common secret-bearing local files.
+.env
+.env.*
+id_rsa
+id_ed25519
+*.pem
+*.key
+*.pfx
+*.p12

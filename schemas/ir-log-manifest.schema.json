@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/ir-log-manifest.schema.json",
+  "title": "Incident Response Host Triage Log Manifest",
+  "type": "object",
+  "required": [
+    "schema",
+    "script_name",
+    "script_version",
+    "os_type",
+    "hostname",
+    "collected_at_utc",
+    "output_directory",
+    "privilege",
+    "read_only",
+    "network_upload_performed",
+    "files"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ir-log-manifest/v1"
+    },
+    "script_name": {
+      "type": "string"
+    },
+    "script_version": {
+      "type": "string"
+    },
+    "os_type": {
+      "type": "string",
+      "enum": ["windows", "linux"]
+    },
+    "hostname": {
+      "type": "string"
+    },
+    "collected_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "output_directory": {
+      "type": "string"
+    },
+    "privilege": {
+      "type": "string",
+      "enum": ["administrator", "root", "standard-user", "unknown"]
+    },
+    "collector_user": {
+      "type": "string"
+    },
+    "read_only": {
+      "type": "boolean",
+      "const": true
+    },
+    "network_upload_performed": {
+      "type": "boolean",
+      "const": false
+    },
+    "command_failures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "size", "sha256"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}
