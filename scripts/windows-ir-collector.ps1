@@ -401,42 +401,42 @@ if ($FailureLines -match "sysmon_recent") {
   $CriticalGaps.Add("Sysmon log was unavailable or collection failed; enhanced process, network, file, registry, and DNS telemetry may be absent.") | Out-Null
 }
 $Coverage = [ordered]@{
-  system = if ($FailureLines -match "^system/|^system\\") { "partial" } else { "complete" }
-  accounts = if ($FailureLines -match "^accounts/|^accounts\\") { "partial" } else { "complete" }
-  process = if ($FailureLines -match "^process/|^process\\") { "partial" } else { "complete" }
-  network = if ($FailureLines -match "^network/|^network\\") { "partial" } else { "complete" }
-  persistence = if ($FailureLines -match "^persistence/|^persistence\\") { "partial" } else { "complete" }
-  events = if ($FailureLines -match "^events/|^events\\") { "partial" } else { "complete" }
-  files = if ($FailureLines -match "^files/|^files\\") { "partial" } else { "complete" }
-  security_products = if ($FailureLines -match "^security/|^security\\") { "partial" } else { "complete" }
+  system = $(if ($FailureLines -match "^system/|^system\\") { "partial" } else { "complete" })
+  accounts = $(if ($FailureLines -match "^accounts/|^accounts\\") { "partial" } else { "complete" })
+  process = $(if ($FailureLines -match "^process/|^process\\") { "partial" } else { "complete" })
+  network = $(if ($FailureLines -match "^network/|^network\\") { "partial" } else { "complete" })
+  persistence = $(if ($FailureLines -match "^persistence/|^persistence\\") { "partial" } else { "complete" })
+  events = $(if ($FailureLines -match "^events/|^events\\") { "partial" } else { "complete" })
+  files = $(if ($FailureLines -match "^files/|^files\\") { "partial" } else { "complete" })
+  security_products = $(if ($FailureLines -match "^security/|^security\\") { "partial" } else { "complete" })
 }
+$Privilege = if ($IsAdmin) { "administrator" } else { "standard-user" }
 
-$Manifest = [ordered]@{
-  schema = "ir-log-manifest/v1"
-  schema_version = 2
-  script_name = "windows-ir-collector.bat"
-  script_version = $ScriptVersion
-  collector_mode = "modern-powershell"
-  os_type = "windows"
-  hostname = $env:COMPUTERNAME
-  collected_at_utc = $CollectionFinishedUtc.ToString("o")
-  collection_started_utc = $CollectionStartedUtc.ToString("o")
-  collection_finished_utc = $CollectionFinishedUtc.ToString("o")
-  collection_profile = "standard"
-  output_directory = $OutDir
-  privilege = if ($IsAdmin) { "administrator" } else { "standard-user" }
-  collector_user = "$env:USERDOMAIN\$env:USERNAME"
-  read_only = $true
-  network_upload_performed = $false
-  encoding = "utf-8"
-  codepage = 65001
-  sensitive_data_warning = $true
-  coverage = $Coverage
-  critical_gaps = @($CriticalGaps)
-  commands = @($CommandRecords)
-  command_failures = $FailureLines
-  files = @($Files)
-}
+$Manifest = New-Object System.Collections.Specialized.OrderedDictionary
+$Manifest["schema"] = "ir-log-manifest/v1"
+$Manifest["schema_version"] = 2
+$Manifest["script_name"] = "windows-ir-collector.bat"
+$Manifest["script_version"] = $ScriptVersion
+$Manifest["collector_mode"] = "modern-powershell"
+$Manifest["os_type"] = "windows"
+$Manifest["hostname"] = $env:COMPUTERNAME
+$Manifest["collected_at_utc"] = $CollectionFinishedUtc.ToString("o")
+$Manifest["collection_started_utc"] = $CollectionStartedUtc.ToString("o")
+$Manifest["collection_finished_utc"] = $CollectionFinishedUtc.ToString("o")
+$Manifest["collection_profile"] = "standard"
+$Manifest["output_directory"] = $OutDir
+$Manifest["privilege"] = $Privilege
+$Manifest["collector_user"] = "$env:USERDOMAIN\$env:USERNAME"
+$Manifest["read_only"] = $true
+$Manifest["network_upload_performed"] = $false
+$Manifest["encoding"] = "utf-8"
+$Manifest["codepage"] = 65001
+$Manifest["sensitive_data_warning"] = $true
+$Manifest["coverage"] = $Coverage
+$Manifest["critical_gaps"] = $CriticalGaps.ToArray()
+$Manifest["commands"] = $CommandRecords.ToArray()
+$Manifest["command_failures"] = $FailureLines
+$Manifest["files"] = @($Files)
 
 $Manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $OutDir "manifest.json")
 Write-Host "[*] Done. Review `"$OutDir\manifest.json`""

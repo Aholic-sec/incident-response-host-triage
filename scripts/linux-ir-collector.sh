@@ -203,7 +203,7 @@ if any("auditd_recent" in f for f in failures):
     critical_gaps.append("auditd logs or rules were unavailable; process/account audit conclusions are limited.")
 if any("container" in f for f in failures):
     critical_gaps.append("Container runtime details were unavailable or incomplete.")
-finished_utc = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+finished_utc = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 manifest = {
     "schema": "ir-log-manifest/v1",
     "schema_version": 2,
