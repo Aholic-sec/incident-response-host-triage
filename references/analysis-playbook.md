@@ -7,9 +7,10 @@ Use this playbook after a collector has produced an `IR-Logs-*` directory.
 Read `manifest.json` first and record:
 
 - OS type, hostname, collection time, script version, privilege level.
+- Collector mode, collection profile, collection start/finish time, and host timezone if available.
 - Encoding and code page from `manifest.json` and `system/encoding.txt`.
 - Whether collection was administrator/root or standard user.
-- Command failures and missing tools.
+- Coverage matrix, critical gaps, command failures, missing tools, timeouts, and permission-denied results.
 - Number of files collected and any empty or truncated critical logs.
 
 State coverage limits early. For example: "Security event logs were unavailable under standard-user collection, so logon conclusions are limited."
@@ -54,6 +55,8 @@ Evidence Source:
 Evidence Snippet:
 Why It Matters:
 Related Evidence:
+MITRE ATT&CK:
+False-Positive Checks:
 Recommended Verification:
 ```
 
@@ -95,8 +98,33 @@ Raise severity when two or more evidence classes align:
 - Include false-positive considerations.
 - Do not claim eradication unless cleanup evidence exists.
 - Do not state attribution unless the supplied evidence supports it.
+- Redact complete secrets, tokens, cookies, private keys, passwords, and API keys from reports.
+- Treat dual-use tools as suspicious only when path, timing, account, command line, persistence, or network behavior supports abuse.
+- Map confirmed and high-suspicion findings to MITRE ATT&CK where possible.
 
-## 9. Follow-Up Recommendations
+## 9. Structured Findings JSON
+
+When the operator requests structured output, or when findings will feed case tracking, emit `findings.json` alongside the Markdown report:
+
+```json
+{
+  "finding_id": "F-001",
+  "title": "Suspicious service launches binary from user-writable path",
+  "severity": "High",
+  "confidence": "High Suspicion",
+  "threat_category": "RAT or backdoor",
+  "mitre_attack": [
+    {"tactic": "Persistence", "technique": "T1543.003 Windows Service"}
+  ],
+  "evidence": [
+    {"file": "persistence/services.txt", "snippet": "...", "timestamp": "..."}
+  ],
+  "false_positive_checks": ["Confirm whether the service is approved by the asset owner."],
+  "recommended_next_steps": ["Preserve the binary and hash before cleanup."]
+}
+```
+
+## 10. Follow-Up Recommendations
 
 Recommend follow-up based on evidence:
 

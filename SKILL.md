@@ -27,6 +27,14 @@ Each collector creates an `IR-Logs-*` directory with `manifest.json`, command ou
 5. For the final deliverable, use `references/report-template.md`.
 6. Cite original log filenames and exact evidence snippets or line references wherever possible.
 
+## Task Routing
+
+- `collection`: provide collector usage, privilege guidance, and sensitive-data handling notes.
+- `analysis`: inspect `manifest.json`, `coverage`, `critical_gaps`, `command_failures`, and source logs before making findings.
+- `report`: generate an evidence-backed Markdown report and, when useful, a structured `findings.json`.
+- `containment-plan`: recommend containment only as a plan unless the user explicitly authorizes action.
+- `cleanup`: require explicit operator approval and evidence preservation steps before deletion, quarantine, account disabling, or configuration changes.
+
 ## Cross-Agent Use
 
 This skill is not Codex-only. For Claude, Gemini, local LLMs, Dify, Coze, Flowise, or other agents, start from `AGENT_GUIDE.md`. The guide defines the same workflow without relying on Codex skill mechanics.
@@ -39,6 +47,10 @@ This skill is not Codex-only. For Claude, Gemini, local LLMs, Dify, Coze, Flowis
 - Prefer behavior and evidence chains over single IOC matches.
 - Mark missing logs, permission limitations, and command failures as coverage gaps.
 - Keep remediation recommendations separate from observed evidence.
+- Do not declare infection, attribution, or eradication from a single filename, IOC, or weak signal.
+- Treat dual-use tools as suspicious only when timing, path, account, command line, persistence, or network behavior supports abuse.
+- Map confirmed or high-confidence findings to MITRE ATT&CK tactics and techniques where possible.
+- Redact secrets in reports: do not expose complete tokens, cookies, private keys, passwords, API keys, or long credential material.
 
 ## Report Output
 
@@ -54,3 +66,5 @@ Default to Markdown. Use Chinese for reports when the user writes in Chinese or 
 - impact assessment
 - containment, eradication, recovery, and hardening recommendations
 - appendix with source log references
+
+When structured output is requested or downstream automation is likely, also provide `findings.json` with finding id, title, severity, confidence, ATT&CK mapping, evidence sources, false-positive checks, and next steps.

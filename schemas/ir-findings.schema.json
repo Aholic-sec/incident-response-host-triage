@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/ir-findings.schema.json",
+  "title": "Incident Response Host Triage Findings",
+  "type": "object",
+  "required": ["schema", "findings"],
+  "properties": {
+    "schema": {
+      "const": "ir-findings/v1"
+    },
+    "source_manifest": {
+      "type": "string"
+    },
+    "generated_at_utc": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "title", "severity", "confidence", "evidence"],
+        "properties": {
+          "finding_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["Critical", "High", "Medium", "Low", "Info"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["Confirmed", "High Suspicion", "Suspicious", "Needs Context", "No Finding"]
+          },
+          "threat_category": {
+            "type": "string"
+          },
+          "mitre_attack": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tactic": {
+                  "type": "string"
+                },
+                "technique": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["file", "snippet"],
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "timestamp": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "false_positive_checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommended_next_steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

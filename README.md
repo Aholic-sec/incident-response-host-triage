@@ -11,7 +11,7 @@ This repository is designed for two use cases:
 
 The collectors are read-only. They do not delete files, kill processes, quarantine samples, clear logs, change configuration, or upload data.
 
-Generated `IR-Logs-*` directories may contain sensitive host information. Do not commit or publish collected logs.
+Generated `IR-Logs-*` directories may contain sensitive host information, including usernames, hostnames, command history, environment variables, tokens, cookies, API keys, SSH keys, cloud credentials, and application paths. Do not commit or publish collected logs. Redact secrets in reports and share only the minimum evidence required.
 
 ## Repository Layout
 
@@ -24,6 +24,7 @@ Generated `IR-Logs-*` directories may contain sensitive host information. Do not
 - `references/malware-coverage.md`: Threat coverage and detection heuristics.
 - `references/report-template.md`: Markdown report template.
 - `schemas/ir-log-manifest.schema.json`: Manifest schema.
+- `schemas/ir-findings.schema.json`: Optional structured findings schema for `findings.json`.
 
 ## Windows Collection
 
@@ -43,6 +44,8 @@ The script creates:
 ```text
 IR-Logs-Windows-HOSTNAME-TIMESTAMP\
 ```
+
+Modern PowerShell mode records command status, command timing, coverage, critical gaps, file hashes, and a sensitive-data warning in `manifest.json`. Legacy BAT fallback mode records reduced coverage and marks hash limitations explicitly.
 
 When finished, the console displays a clear completion banner and waits for a key press.
 
@@ -69,6 +72,8 @@ The script creates:
 IR-Logs-Linux-HOSTNAME-TIMESTAMP/
 ```
 
+The Linux collector records command status, command timing, coverage, critical gaps, file hashes, audit/container/cloud credential metadata where available, and a sensitive-data warning in `manifest.json`.
+
 ## AI Analysis Prompt
 
 After collection, provide the generated `IR-Logs-*` directory to an AI agent and use a prompt like:
@@ -79,6 +84,8 @@ Read manifest.json first, follow AGENT_GUIDE.md and references/analysis-playbook
 then generate an evidence-backed incident response report in Chinese.
 Every finding must cite the original log file.
 ```
+
+For automation or case tracking, ask the agent to emit both a Markdown report and `findings.json` with severity, confidence, MITRE ATT&CK mapping, evidence, false-positive checks, and next steps.
 
 ## Encoding Notes
 

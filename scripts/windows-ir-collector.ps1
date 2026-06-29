@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Continue"
-$ScriptVersion = "2026.06.27"
+$ScriptVersion = "2026.06.29"
+$CollectionStartedUtc = (Get-Date).ToUniversalTime()
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -20,9 +21,11 @@ foreach ($Dir in $Dirs) {
 
 $CommandIndex = Join-Path $OutDir "command-index.tsv"
 $Failures = Join-Path $OutDir "errors\command-failures.tsv"
-"file`tcommand`texit_code" | Set-Content -Encoding UTF8 -LiteralPath $CommandIndex
+"file`tcommand`texit_code`tstatus`tstarted_utc`tfinished_utc`tduration_ms" | Set-Content -Encoding UTF8 -LiteralPath $CommandIndex
 "" | Set-Content -Encoding UTF8 -LiteralPath $Failures
 "encoding=utf-8`r`ncodepage=65001`r`npowershell_output_encoding=$($OutputEncoding.WebName)" | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $OutDir "system\encoding.txt")
+
+$CommandRecords = New-Object System.Collections.Generic.List[object]
 
 Write-Host "[*] Windows IR collector $ScriptVersion"
 Write-Host "[*] Output: `"$OutDir`""
@@ -32,12 +35,25 @@ function Add-Index {
   param(
     [string]$Rel,
     [string]$Command,
-    [int]$ExitCode
+    [int]$ExitCode,
+    [datetime]$StartedUtc,
+    [datetime]$FinishedUtc,
+    [string]$Status
   )
-  "$Rel`t$Command`t$ExitCode" | Add-Content -Encoding UTF8 -LiteralPath $CommandIndex
+  $DurationMs = [int][Math]::Max(0, ($FinishedUtc - $StartedUtc).TotalMilliseconds)
+  "$Rel`t$Command`t$ExitCode`t$Status`t$($StartedUtc.ToString('o'))`t$($FinishedUtc.ToString('o'))`t$DurationMs" | Add-Content -Encoding UTF8 -LiteralPath $CommandIndex
   if ($ExitCode -ne 0) {
     "$Rel`t$Command`t$ExitCode" | Add-Content -Encoding UTF8 -LiteralPath $Failures
   }
+  $CommandRecords.Add([ordered]@{
+    file = $Rel.Replace("\", "/")
+    command = $Command
+    exit_code = $ExitCode
+    status = $Status
+    started_utc = $StartedUtc.ToString("o")
+    finished_utc = $FinishedUtc.ToString("o")
+    duration_ms = $DurationMs
+  }) | Out-Null
 }
 
 function Invoke-NativeCollect {
@@ -46,7 +62,9 @@ function Invoke-NativeCollect {
     [string]$Command
   )
   $Dest = Join-Path $OutDir $Rel
-  "[$((Get-Date).ToUniversalTime().ToString('o'))] $ $Command" | Set-Content -Encoding UTF8 -LiteralPath $Dest
+  $StartedUtc = (Get-Date).ToUniversalTime()
+  $Text = ""
+  "[$($StartedUtc.ToString('o'))] $ $Command" | Set-Content -Encoding UTF8 -LiteralPath $Dest
   try {
     $Text = & $env:ComSpec /d /u /c $Command 2>&1 | Out-String -Width 4096
     $Text | Add-Content -Encoding UTF8 -LiteralPath $Dest
@@ -55,7 +73,9 @@ function Invoke-NativeCollect {
     $_ | Out-String | Add-Content -Encoding UTF8 -LiteralPath $Dest
     $Rc = 1
   }
-  Add-Index -Rel $Rel -Command $Command -ExitCode $Rc
+  $FinishedUtc = (Get-Date).ToUniversalTime()
+  $Status = if ($Rc -eq 0) { "ok" } elseif ($Rc -eq 5 -or ($Text -match "Access is denied|拒绝访问")) { "permission_denied" } else { "failed" }
+  Add-Index -Rel $Rel -Command $Command -ExitCode $Rc -StartedUtc $StartedUtc -FinishedUtc $FinishedUtc -Status $Status
 }
 
 function Invoke-ScriptCollect {
@@ -65,7 +85,9 @@ function Invoke-ScriptCollect {
     [scriptblock]$Script
   )
   $Dest = Join-Path $OutDir $Rel
-  "[$((Get-Date).ToUniversalTime().ToString('o'))] PS> $Name" | Set-Content -Encoding UTF8 -LiteralPath $Dest
+  $StartedUtc = (Get-Date).ToUniversalTime()
+  $Text = ""
+  "[$($StartedUtc.ToString('o'))] PS> $Name" | Set-Content -Encoding UTF8 -LiteralPath $Dest
   try {
     $Text = & $Script 2>&1 | Out-String -Width 4096
     $Text | Add-Content -Encoding UTF8 -LiteralPath $Dest
@@ -74,7 +96,9 @@ function Invoke-ScriptCollect {
     $_ | Out-String | Add-Content -Encoding UTF8 -LiteralPath $Dest
     $Rc = 1
   }
-  Add-Index -Rel $Rel -Command "powershell:$Name" -ExitCode $Rc
+  $FinishedUtc = (Get-Date).ToUniversalTime()
+  $Status = if ($Rc -eq 0) { "ok" } elseif ($Text -match "Access is denied|拒绝访问|UnauthorizedAccess") { "permission_denied" } else { "failed" }
+  Add-Index -Rel $Rel -Command "powershell:$Name" -ExitCode $Rc -StartedUtc $StartedUtc -FinishedUtc $FinishedUtc -Status $Status
 }
 
 Invoke-NativeCollect "system\systeminfo.txt" "systeminfo"
@@ -158,6 +182,11 @@ Invoke-ScriptCollect "events\security_logon_recent.txt" "recent logon events" {
     Select-Object TimeCreated, Id, ProviderName, Message |
     Format-List *
 }
+Invoke-ScriptCollect "events\security_process_task_share_recent.txt" "security process task share and log tamper events" {
+  Get-WinEvent -FilterHashtable @{LogName="Security"; Id=4688,4689,4697,4698,4702,1102,4719,4728,4732,4756,4768,4769,4771,4776,5140,5145; StartTime=(Get-Date).AddDays(-14)} -MaxEvents 1200 -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, ProviderName, Message |
+    Format-List *
+}
 Invoke-ScriptCollect "events\account_changes_recent.txt" "recent account changes" {
   Get-WinEvent -FilterHashtable @{LogName="Security"; Id=4720,4722,4723,4724,4725,4726,4732,4733,4756; StartTime=(Get-Date).AddDays(-30)} -MaxEvents 800 -ErrorAction SilentlyContinue |
     Select-Object TimeCreated, Id, ProviderName, Message |
@@ -172,6 +201,36 @@ Invoke-ScriptCollect "events\powershell_operational_recent.txt" "PowerShell oper
   Get-WinEvent -LogName "Microsoft-Windows-PowerShell/Operational" -MaxEvents 800 -ErrorAction SilentlyContinue |
     Select-Object TimeCreated, Id, Message |
     Format-List *
+}
+Invoke-ScriptCollect "events\powershell_scriptblock_recent.txt" "PowerShell script block and module events" {
+  Get-WinEvent -FilterHashtable @{LogName="Microsoft-Windows-PowerShell/Operational"; Id=400,600,4103,4104; StartTime=(Get-Date).AddDays(-14)} -MaxEvents 1200 -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Format-List *
+}
+Invoke-ScriptCollect "events\taskscheduler_operational_recent.txt" "TaskScheduler operational events" {
+  Get-WinEvent -FilterHashtable @{LogName="Microsoft-Windows-TaskScheduler/Operational"; Id=106,140,141,200,201; StartTime=(Get-Date).AddDays(-30)} -MaxEvents 800 -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Format-List *
+}
+Invoke-ScriptCollect "events\sysmon_recent.txt" "Sysmon operational events if installed" {
+  Get-WinEvent -FilterHashtable @{LogName="Microsoft-Windows-Sysmon/Operational"; Id=1,3,7,10,11,13,22,23,25,26; StartTime=(Get-Date).AddDays(-14)} -MaxEvents 1200 -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Format-List *
+}
+Invoke-ScriptCollect "events\winrm_wmi_smb_recent.txt" "WinRM WMI SMB remote access events" {
+  $Logs = @(
+    "Microsoft-Windows-WinRM/Operational",
+    "Microsoft-Windows-WMI-Activity/Operational",
+    "Microsoft-Windows-SMBClient/Operational",
+    "Microsoft-Windows-SMBServer/Operational",
+    "Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational"
+  )
+  foreach ($LogName in $Logs) {
+    "### LOG: $LogName"
+    Get-WinEvent -LogName $LogName -MaxEvents 500 -ErrorAction SilentlyContinue |
+      Select-Object TimeCreated, Id, Message |
+      Format-List *
+  }
 }
 Invoke-ScriptCollect "events\rdp_recent.txt" "RDP local session manager events" {
   Get-WinEvent -LogName "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational" -MaxEvents 500 -ErrorAction SilentlyContinue |
@@ -226,6 +285,66 @@ Invoke-ScriptCollect "files\suspicious_names.txt" "suspicious filenames" {
       Format-List *
   }
 }
+Invoke-ScriptCollect "files\execution_artifacts_inventory.txt" "Prefetch Amcache SRUM and user execution artifacts inventory" {
+  $Paths = @(
+    "$env:SystemRoot\Prefetch",
+    "$env:SystemRoot\AppCompat\Programs",
+    "$env:SystemRoot\System32\sru",
+    "$env:APPDATA\Microsoft\Windows\Recent",
+    "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine",
+    "$env:LOCALAPPDATA\Microsoft\Windows\PowerShell\PSReadLine"
+  ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+  foreach ($Path in $Paths) {
+    "### PATH: $Path"
+    Get-ChildItem $Path -Force -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 300 FullName, Length, CreationTime, LastWriteTime |
+      Format-Table -AutoSize
+  }
+}
+Invoke-ScriptCollect "files\zone_identifier_downloads.txt" "downloaded files with Zone.Identifier ADS" {
+  $Roots = @("$env:USERPROFILE\Downloads", "$env:USERPROFILE\Desktop", "$env:TEMP", "$env:LOCALAPPDATA\Temp") |
+    Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+  foreach ($Root in $Roots) {
+    "### ROOT: $Root"
+    Get-ChildItem $Root -Recurse -Force -ErrorAction SilentlyContinue |
+      Where-Object { -not $_.PSIsContainer -and $_.LastWriteTime -gt (Get-Date).AddDays(-30) } |
+      Select-Object -First 300 -ExpandProperty FullName |
+      ForEach-Object {
+        $Zone = Get-Content -LiteralPath "${_}:Zone.Identifier" -ErrorAction SilentlyContinue
+        if ($Zone) {
+          "FILE: $_"
+          $Zone
+        }
+      }
+  }
+}
+Invoke-ScriptCollect "security\remote_admin_tools.txt" "remote administration tool inventory" {
+  Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+    Where-Object { "$($_.DisplayName) $($_.InstallLocation)" -match "AnyDesk|ToDesk|Sunlogin|向日葵|RustDesk|TeamViewer|ScreenConnect|VNC|Splashtop|AweSun|DameWare|OpenSSH" } |
+    Select-Object DisplayName, DisplayVersion, Publisher, InstallDate, InstallLocation |
+    Format-List *
+  Get-Service -ErrorAction SilentlyContinue |
+    Where-Object { "$($_.Name) $($_.DisplayName)" -match "AnyDesk|ToDesk|Sunlogin|向日葵|RustDesk|TeamViewer|ScreenConnect|VNC|Splashtop|AweSun|OpenSSH|sshd" } |
+    Select-Object Name, DisplayName, Status, StartType |
+    Format-Table -AutoSize
+}
+Invoke-ScriptCollect "files\risky_file_hashes.txt" "hashes for recent high-risk files" {
+  $Roots = @($env:TEMP, $env:TMP, "$env:USERPROFILE\Downloads", "$env:USERPROFILE\Desktop", "$env:LOCALAPPDATA\Temp", "C:\ProgramData", "C:\Users\Public") |
+    Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+  $Ext = "\.(exe|dll|scr|bat|cmd|ps1|vbs|js|jar|lnk)$"
+  foreach ($Root in $Roots) {
+    Get-ChildItem $Root -Recurse -Force -ErrorAction SilentlyContinue |
+      Where-Object { -not $_.PSIsContainer -and $_.Name -match $Ext -and $_.LastWriteTime -gt (Get-Date).AddDays(-30) } |
+      Select-Object -First 200 |
+      ForEach-Object {
+        $Hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName -ErrorAction SilentlyContinue
+        if ($Hash) {
+          [PSCustomObject]@{ Path = $_.FullName; Length = $_.Length; LastWriteTime = $_.LastWriteTime; SHA256 = $Hash.Hash }
+        }
+      } | Format-Table -AutoSize
+  }
+}
 
 Invoke-ScriptCollect "security\defender_status.txt" "Defender status" {
   Get-MpComputerStatus -ErrorAction SilentlyContinue | Format-List *
@@ -270,14 +389,40 @@ $FailureLines = @()
 if (Test-Path $Failures) {
   $FailureLines = Get-Content -LiteralPath $Failures | Where-Object { $_.Trim() }
 }
+$CollectionFinishedUtc = (Get-Date).ToUniversalTime()
+$CriticalGaps = New-Object System.Collections.Generic.List[string]
+if (-not $IsAdmin) {
+  $CriticalGaps.Add("Collector was not run as administrator; Security event log, process module, service, and protected path visibility may be limited.") | Out-Null
+}
+if ($FailureLines -match "security_logon_recent|security_process_task_share_recent") {
+  $CriticalGaps.Add("One or more Security event log collections failed; logon, process creation, task, SMB, and audit-policy conclusions are limited.") | Out-Null
+}
+if ($FailureLines -match "sysmon_recent") {
+  $CriticalGaps.Add("Sysmon log was unavailable or collection failed; enhanced process, network, file, registry, and DNS telemetry may be absent.") | Out-Null
+}
+$Coverage = [ordered]@{
+  system = if ($FailureLines -match "^system/|^system\\") { "partial" } else { "complete" }
+  accounts = if ($FailureLines -match "^accounts/|^accounts\\") { "partial" } else { "complete" }
+  process = if ($FailureLines -match "^process/|^process\\") { "partial" } else { "complete" }
+  network = if ($FailureLines -match "^network/|^network\\") { "partial" } else { "complete" }
+  persistence = if ($FailureLines -match "^persistence/|^persistence\\") { "partial" } else { "complete" }
+  events = if ($FailureLines -match "^events/|^events\\") { "partial" } else { "complete" }
+  files = if ($FailureLines -match "^files/|^files\\") { "partial" } else { "complete" }
+  security_products = if ($FailureLines -match "^security/|^security\\") { "partial" } else { "complete" }
+}
 
 $Manifest = [ordered]@{
   schema = "ir-log-manifest/v1"
+  schema_version = 2
   script_name = "windows-ir-collector.bat"
   script_version = $ScriptVersion
+  collector_mode = "modern-powershell"
   os_type = "windows"
   hostname = $env:COMPUTERNAME
-  collected_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+  collected_at_utc = $CollectionFinishedUtc.ToString("o")
+  collection_started_utc = $CollectionStartedUtc.ToString("o")
+  collection_finished_utc = $CollectionFinishedUtc.ToString("o")
+  collection_profile = "standard"
   output_directory = $OutDir
   privilege = if ($IsAdmin) { "administrator" } else { "standard-user" }
   collector_user = "$env:USERDOMAIN\$env:USERNAME"
@@ -285,6 +430,10 @@ $Manifest = [ordered]@{
   network_upload_performed = $false
   encoding = "utf-8"
   codepage = 65001
+  sensitive_data_warning = $true
+  coverage = $Coverage
+  critical_gaps = @($CriticalGaps)
+  commands = @($CommandRecords)
   command_failures = $FailureLines
   files = @($Files)
 }

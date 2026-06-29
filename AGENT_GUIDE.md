@@ -40,7 +40,7 @@ The bundled scripts are designed for read-only collection. They should not delet
 ## Required Analysis Flow
 
 1. Read `manifest.json`.
-2. Record OS, hostname, collection time, script version, privilege level, encoding/codepage, log count, and command failures.
+2. Record OS, hostname, collection time, script version, collector mode, privilege level, encoding/codepage, log count, coverage, critical gaps, and command failures.
 3. Build a host profile: role, exposed services, accounts, privileged users, main runtime paths, network posture.
 4. Build a timeline from logon events, account changes, process/service/task creation, file changes, network connections, and security alerts.
 5. Create evidence cards for every abnormal item:
@@ -54,6 +54,7 @@ The bundled scripts are designed for read-only collection. They should not delet
    - next verification step
 6. Correlate evidence into one or more incident chains.
 7. Produce a Markdown report using `references/report-template.md`.
+8. When useful for case tracking or automation, also produce `findings.json`.
 
 ## Confidence Labels
 
@@ -66,6 +67,29 @@ The bundled scripts are designed for read-only collection. They should not delet
 ## Evidence Requirements
 
 Do not state a host is infected without evidence. Every finding must cite at least one log file. Strong findings should cite two or more evidence types, such as process plus network, task plus file, account plus logon, or web access plus dropped file.
+
+Do not declare infection, attribution, or eradication from a single filename, IOC, or weak signal. Treat dual-use tools as suspicious only when timing, path, account, command line, persistence, or network behavior supports abuse.
+
+## Sensitive Data Handling
+
+Collected logs may contain tokens, passwords, cookies, private keys, internal hostnames, user data, and command history. Preserve raw logs, but redact secrets in reports and chat output. Quote only the minimum evidence needed to support a finding, and never expose complete credential material unless the operator explicitly requests it for an approved forensic workflow.
+
+## Structured Findings
+
+For each confirmed, high-suspicion, or suspicious item, optionally emit a machine-readable record:
+
+```json
+{
+  "finding_id": "F-001",
+  "title": "Suspicious scheduled task launches payload from ProgramData",
+  "severity": "High",
+  "confidence": "High Suspicion",
+  "mitre_attack": [{"tactic": "Persistence", "technique": "T1053.005 Scheduled Task"}],
+  "evidence": [{"file": "persistence/scheduled_tasks.txt", "snippet": "..."}],
+  "false_positive_checks": [],
+  "recommended_next_steps": []
+}
+```
 
 ## Encoding Notes
 

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-set "SCRIPT_VERSION=2026.06.27"
+set "SCRIPT_VERSION=2026.06.29"
 set "SCRIPT_DIR=%~dp0"
 set "NO_PAUSE=0"
 if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
@@ -57,12 +57,14 @@ set "LDT="
 for /f "tokens=2 delims==" %%I in ('wmic os get LocalDateTime /value 2^>nul ^| find "="') do set "LDT=%%I"
 if defined LDT (
     set "TS=%LDT:~0,8%-%LDT:~8,6%"
+    set "COLLECTED_UTC=%LDT:~0,4%-%LDT:~4,2%-%LDT:~6,2%T%LDT:~8,2%:%LDT:~10,2%:%LDT:~12,2%Z"
 ) else (
     set "TS=%DATE%-%TIME%"
     set "TS=%TS:/=%"
     set "TS=%TS::=%"
     set "TS=%TS:.=%"
     set "TS=%TS: =0%"
+    set "COLLECTED_UTC=unknown"
 )
 
 set "HOST_SAFE=%COMPUTERNAME%"
@@ -70,7 +72,7 @@ if "%HOST_SAFE%"=="" set "HOST_SAFE=UNKNOWNHOST"
 set "OUTDIR=%CD%\IR-Logs-Windows-%HOST_SAFE%-%TS%-legacy"
 
 mkdir "%OUTDIR%" "%OUTDIR%\system" "%OUTDIR%\accounts" "%OUTDIR%\process" "%OUTDIR%\network" "%OUTDIR%\persistence" "%OUTDIR%\events" "%OUTDIR%\files" "%OUTDIR%\security" "%OUTDIR%\errors" 2>nul
-> "%OUTDIR%\command-index.tsv" echo file	command	exit_code
+> "%OUTDIR%\command-index.tsv" echo file	command	exit_code	status
 > "%OUTDIR%\errors\command-failures.tsv" echo.
 
 echo [*] Windows BAT compatibility collector %SCRIPT_VERSION%
@@ -142,7 +144,8 @@ for /f "usebackq tokens=1,* delims=|" %%A in ("%CMD_FILE%") do (
     > "!DEST!" echo [!DATE! !TIME!] $ !CMDLINE!
     cmd /d /c "!CMDLINE!" >> "!DEST!" 2>&1
     set "CMD_RC=!ERRORLEVEL!"
-    >> "%OUTDIR%\command-index.tsv" echo !REL!	!CMDLINE!	!CMD_RC!
+    if "!CMD_RC!"=="0" (set "CMD_STATUS=ok") else (set "CMD_STATUS=failed")
+    >> "%OUTDIR%\command-index.tsv" echo !REL!	!CMDLINE!	!CMD_RC!	!CMD_STATUS!
     if not "!CMD_RC!"=="0" >> "%OUTDIR%\errors\command-failures.tsv" echo !REL!	!CMDLINE!	!CMD_RC!
 )
 
@@ -150,17 +153,36 @@ for /f "usebackq tokens=1,* delims=|" %%A in ("%CMD_FILE%") do (
 >> "%OUTDIR%\manifest.json" echo   "schema": "ir-log-manifest/v1",
 >> "%OUTDIR%\manifest.json" echo   "script_name": "windows-ir-collector.bat",
 >> "%OUTDIR%\manifest.json" echo   "script_version": "%SCRIPT_VERSION%",
+>> "%OUTDIR%\manifest.json" echo   "schema_version": 2,
 >> "%OUTDIR%\manifest.json" echo   "collector_mode": "legacy-bat",
 >> "%OUTDIR%\manifest.json" echo   "os_type": "windows",
 >> "%OUTDIR%\manifest.json" echo   "hostname": "%COMPUTERNAME%",
+>> "%OUTDIR%\manifest.json" echo   "collected_at_utc": "%COLLECTED_UTC%",
+>> "%OUTDIR%\manifest.json" echo   "collection_started_utc": "%COLLECTED_UTC%",
+>> "%OUTDIR%\manifest.json" echo   "collection_finished_utc": "%COLLECTED_UTC%",
+>> "%OUTDIR%\manifest.json" echo   "collection_profile": "legacy-standard",
 >> "%OUTDIR%\manifest.json" echo   "output_directory": "%OUTDIR:\=\\%",
 >> "%OUTDIR%\manifest.json" echo   "privilege": "unknown",
 >> "%OUTDIR%\manifest.json" echo   "read_only": true,
 >> "%OUTDIR%\manifest.json" echo   "network_upload_performed": false,
 >> "%OUTDIR%\manifest.json" echo   "encoding": "utf-8-best-effort",
 >> "%OUTDIR%\manifest.json" echo   "codepage": 65001,
+>> "%OUTDIR%\manifest.json" echo   "sensitive_data_warning": true,
+>> "%OUTDIR%\manifest.json" echo   "coverage": {
+>> "%OUTDIR%\manifest.json" echo     "system": "partial",
+>> "%OUTDIR%\manifest.json" echo     "accounts": "partial",
+>> "%OUTDIR%\manifest.json" echo     "process": "partial",
+>> "%OUTDIR%\manifest.json" echo     "network": "partial",
+>> "%OUTDIR%\manifest.json" echo     "persistence": "partial",
+>> "%OUTDIR%\manifest.json" echo     "events": "partial",
+>> "%OUTDIR%\manifest.json" echo     "files": "partial",
+>> "%OUTDIR%\manifest.json" echo     "security_products": "partial"
+>> "%OUTDIR%\manifest.json" echo   },
+>> "%OUTDIR%\manifest.json" echo   "critical_gaps": ["Legacy BAT fallback mode has reduced event, hash, and protected artifact coverage."],
 >> "%OUTDIR%\manifest.json" echo   "files_index_file": "command-index.tsv",
 >> "%OUTDIR%\manifest.json" echo   "command_failures_file": "errors/command-failures.tsv",
+>> "%OUTDIR%\manifest.json" echo   "files": [],
+>> "%OUTDIR%\manifest.json" echo   "hash_unavailable": true,
 >> "%OUTDIR%\manifest.json" echo   "compatibility_note": "BAT fallback mode for Windows Server 2003/2008 class systems or hosts without PowerShell 3+. Some commands may be missing depending on installed components."
 >> "%OUTDIR%\manifest.json" echo }
 
