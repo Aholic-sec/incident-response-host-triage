@@ -132,7 +132,11 @@ run_shell "security/security_controls.txt" "selinux apparmor and security contro
 
 generate_manifest() {
   py=""
-  if command -v python3 >/dev/null 2>&1; then py="python3"; elif command -v python >/dev/null 2>&1; then py="python"; fi
+  if command -v python3 >/dev/null 2>&1; then
+    py="python3"
+  elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)' >/dev/null 2>&1; then
+    py="python"
+  fi
   if [ -n "$py" ]; then
     "$py" - "$OUTDIR" "$SCRIPT_VERSION" "$COLLECTION_STARTED_UTC" <<'PY'
 import datetime, getpass, hashlib, json, os, socket, sys
